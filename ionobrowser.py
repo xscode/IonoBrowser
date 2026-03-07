@@ -345,7 +345,7 @@ class SDRWebSocketWorker(QThread):
     property_update = pyqtSignal(str, str)
     error           = pyqtSignal(str)
 
-    def __init__(self, host="localhost", port=8073):
+    def __init__(self, host="localhost", port=5454):
         super().__init__()
         self.host     = host
         self.port     = port
