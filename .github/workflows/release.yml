@@ -43,7 +43,8 @@ jobs:
           pip install pyinstaller
 
       - name: Build EXE
-        run: pyinstaller IonoBrowser.spec
+        run: pyinstaller --distpath dist --workpath build --specpath . IonoBrowser.spec
+        working-directory: ${{ github.workspace }}
 
       - name: Upload EXE artifact
         uses: actions/upload-artifact@v4
