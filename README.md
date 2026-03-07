@@ -10,7 +10,8 @@ Open multiple frequency databases in tabs, filter by text, time-of-broadcast, or
 
 ## Screenshots
 
-_Screenshots coming soon._
+![Single file with reading freqency from SDRConnect](images/main_window.jpg)
+![Multiple files with reading freqency from SDRConnect](images/main_window2.jpg)
 
 ---
 
