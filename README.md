@@ -180,11 +180,9 @@ Settings include window geometry, SDRConnect host/port, last open files, and the
 
 ## Roadmap
 
-- [ ] Scheduled auto-refresh of cached databases
-- [ ] Column visibility toggle per tab
-- [ ] Highlight rows matching current frequency without filtering
-- [ ] Export filtered view to CSV
-- [ ] Support for additional database formats
+- [ ] Control of other SDR software (SDRUno / SDRConsole / SDR++ etc...).
+- [ ] Logging of heard stations.
+
 
 ---
 
