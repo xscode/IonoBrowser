@@ -1,3 +1,6 @@
+## This program was written with lots of help from the Claude AI. I understand that many people don't like applications written in this manner and I am usually the same, but I needed this quickly and this was the best way to achieve results.  
+
+
 # IonoBrowser
 
 **IonoBrowser** is a desktop application for browsing HF shortwave frequency lists and controlling an [SDRplay SDRConnect](https://www.sdrplay.com/sdrconnect/) receiver via its WebSocket API.
