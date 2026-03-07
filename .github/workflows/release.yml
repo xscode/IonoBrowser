@@ -1,0 +1,145 @@
+# .github/workflows/release.yml
+#
+# Triggered when a version tag (e.g. v0.1.0-beta) is pushed to GitHub.
+# Builds:
+#   - Windows .exe  via PyInstaller  (windows-latest runner)
+#   - Linux AppImage via appimage-builder (ubuntu-22.04 runner)
+# Both are attached as assets to the GitHub Release automatically.
+#
+# Usage:
+#   git tag v0.1.0-beta
+#   git push origin v0.1.0-beta
+
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'          # triggers on any tag starting with v
+
+permissions:
+  contents: write     # needed to create the release and upload assets
+
+jobs:
+
+  # ── Windows EXE ────────────────────────────────────────────────────────────
+  build-windows:
+    name: Build Windows EXE
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build EXE
+        run: pyinstaller IonoBrowser.spec
+
+      - name: Upload EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: IonoBrowser-windows
+          path: dist/IonoBrowser.exe
+
+  # ── Linux AppImage ─────────────────────────────────────────────────────────
+  build-linux:
+    name: Build Linux AppImage
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install appimage-builder dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            python3-pip python3-setuptools patchelf \
+            desktop-file-utils libgdk-pixbuf2.0-dev fakeroot \
+            strace util-linux zsync
+
+      - name: Install appimage-builder
+        run: pip install appimage-builder
+
+      - name: Copy app into AppDir
+        run: |
+          mkdir -p appimage/AppDir/usr/share/ionobrowser
+          cp ionobrowser.py appimage/AppDir/usr/share/ionobrowser/
+
+      - name: Build AppImage
+        working-directory: appimage
+        env:
+          APP_VERSION: ${{ github.ref_name }}
+        run: appimage-builder --recipe AppImageBuilder.yml --skip-tests
+
+      - name: Find and rename AppImage
+        working-directory: appimage
+        run: |
+          # appimage-builder names the file from the recipe; normalise it
+          mv IonoBrowser-*.AppImage IonoBrowser-${{ github.ref_name }}-x86_64.AppImage
+
+      - name: Upload AppImage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: IonoBrowser-linux
+          path: appimage/IonoBrowser-${{ github.ref_name }}-x86_64.AppImage
+
+  # ── Create GitHub Release ──────────────────────────────────────────────────
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [build-windows, build-linux]
+
+    steps:
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: IonoBrowser-windows
+          path: release-assets
+
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: IonoBrowser-linux
+          path: release-assets
+
+      - name: Create Release and upload assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: IonoBrowser ${{ github.ref_name }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') || contains(github.ref_name, 'rc') }}
+          body: |
+            ## IonoBrowser ${{ github.ref_name }}
+
+            ### Downloads
+            | Platform | File |
+            |----------|------|
+            | Windows  | `IonoBrowser.exe` |
+            | Linux    | `IonoBrowser-${{ github.ref_name }}-x86_64.AppImage` |
+
+            ### Linux usage
+            ```bash
+            chmod +x IonoBrowser-${{ github.ref_name }}-x86_64.AppImage
+            ./IonoBrowser-${{ github.ref_name }}-x86_64.AppImage
+            ```
+
+            ### Run from source
+            See [README](https://github.com/xscode/IonoBrowser#option-2--run-from-source-recommended-if-you-prefer-to-inspect-the-code) for full instructions.
+          files: release-assets/*

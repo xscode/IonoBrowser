@@ -4,7 +4,7 @@
 
 Open multiple frequency databases in tabs, filter by text, time-of-broadcast, or current VFO frequency, and tune your SDR with a double-click.
 
-> **Version 0.1.0-beta** — first public release. Feedback and bug reports welcome via [GitHub Issues](../../issues).
+> **Version 0.1.0-beta** — first public release. Feedback and bug reports welcome via [GitHub Issues](https://github.com/xscode/IonoBrowser/issues).
 
 ---
 
@@ -25,7 +25,7 @@ _Screenshots coming soon._
 - **Live readback** — VFO frequency, demodulator mode, and signal power updated in real time
 - **Dark and Light themes** — switchable from the Help menu, preference saved across sessions
 - **Edit support** — add, edit, and delete entries in any list; save back to CSV
-- **Cross-platform** — Linux, macOS, and Windows
+- **Cross-platform** — designed for Linux, macOS, and Windows _(tested on Linux; Windows/macOS testing in progress)_
 
 ---
 
@@ -46,38 +46,109 @@ Downloaded files are cached in the settings directory and available offline via 
 ## Requirements
 
 - Python 3.10 or newer
-- [PyQt6](https://pypi.org/project/PyQt6/)
-- [websockets](https://pypi.org/project/websockets/)
-- [requests](https://pypi.org/project/requests/) _(optional but recommended — improves download reliability)_
+- Dependencies are listed in `requirements.txt` and installed automatically via `pip install -r requirements.txt`:
+  - [PyQt6](https://pypi.org/project/PyQt6/)
+  - [websockets](https://pypi.org/project/websockets/)
+  - [requests](https://pypi.org/project/requests/) _(improves download reliability)_
 
 ---
 
 ## Installation
 
+### Option 1 — Pre-built binaries (easiest)
+
+Download the latest release from the [Releases page](https://github.com/xscode/IonoBrowser/releases):
+
+| Platform | File |
+|----------|------|
+| Linux | `IonoBrowser-x86_64.AppImage` |
+| Windows | `IonoBrowser.exe` |
+
+**Linux AppImage:**
 ```bash
-# 1. Clone the repository
-git clone https://github.com/YOUR_USERNAME/ionobrowser.git
-cd ionobrowser
-
-# 2. Install dependencies
-pip install PyQt6 websockets requests
-
-# 3. Run
-python ionobrowser.py
+chmod +x IonoBrowser-x86_64.AppImage
+./IonoBrowser-x86_64.AppImage
 ```
 
-### Linux note
-If `pip` complains about system packages, use:
+**Windows exe:** just double-click `IonoBrowser.exe` — no installation required.
+
+---
+
+### Option 2 — Run from source (recommended if you prefer to inspect the code)
+
+This is the most transparent option — you can read every line before running it.
+
+**Linux / macOS:**
 ```bash
-pip install PyQt6 websockets requests --break-system-packages
-```
-Or create a virtual environment first:
-```bash
-python -m venv venv
+git clone https://github.com/xscode/IonoBrowser.git
+cd IonoBrowser
+python3 -m venv venv
 source venv/bin/activate
-pip install PyQt6 websockets requests
+pip install -r requirements.txt
 python ionobrowser.py
 ```
+
+**Windows:**
+```bat
+git clone https://github.com/xscode/IonoBrowser.git
+cd IonoBrowser
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+python ionobrowser.py
+```
+
+**To run again after the first install**, just activate the venv and launch:
+```bash
+# Linux / macOS
+source venv/bin/activate
+python ionobrowser.py
+
+# Windows
+venv\Scripts\activate
+python ionobrowser.py
+```
+
+---
+
+### Option 3 — Build it yourself
+
+If you want a compiled binary but don't want to trust the pre-built one, you can build it yourself from the source.
+
+**Windows exe** (run on Windows inside the venv):
+```bat
+pip install pyinstaller
+pyinstaller IonoBrowser.spec
+# Output: dist/IonoBrowser.exe
+```
+
+**Linux AppImage** (requires [appimage-builder](https://appimage-builder.readthedocs.io)):
+```bash
+pip install appimage-builder
+cd appimage
+APP_VERSION=0.1.0-beta appimage-builder --recipe AppImageBuilder.yml
+```
+
+> _Windows and macOS testing is ongoing — please [open an issue](https://github.com/xscode/IonoBrowser/issues) if you encounter platform-specific problems._
+
+---
+
+## Releases & Automated Builds
+
+Pre-built binaries are generated automatically by GitHub Actions on every tagged release and attached to the [Releases page](https://github.com/xscode/IonoBrowser/releases).
+
+To trigger a new release:
+```bash
+git tag v0.1.0-beta
+git push origin v0.1.0-beta
+```
+
+GitHub Actions will then:
+1. Build `IonoBrowser.exe` on a Windows runner using PyInstaller
+2. Build `IonoBrowser-vX.X.X-x86_64.AppImage` on an Ubuntu runner using appimage-builder
+3. Create a GitHub Release and attach both files automatically
+
+Tags containing `beta`, `alpha`, or `rc` are automatically marked as pre-releases on GitHub.
 
 ---
 
@@ -114,17 +185,6 @@ Settings include window geometry, SDRConnect host/port, last open files, and the
 - [ ] Highlight rows matching current frequency without filtering
 - [ ] Export filtered view to CSV
 - [ ] Support for additional database formats
-
----
-
-## Contributing
-
-Contributions are welcome. Please open an issue first to discuss what you would like to change.
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/my-feature`)
-3. Commit your changes
-4. Open a pull request
 
 ---
 
