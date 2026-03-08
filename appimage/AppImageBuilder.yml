@@ -2,10 +2,8 @@
 # Builds a portable Linux AppImage for IonoBrowser using appimage-builder.
 # Docs: https://appimage-builder.readthedocs.io
 #
-# Usage:
-#   pip install appimage-builder
-#   cd appimage
-#   APP_VERSION=0.1.0-beta appimage-builder --recipe AppImageBuilder.yml
+# Python dependencies are installed into the AppDir via pip in the
+# GitHub Actions workflow before this file runs — see release.yml.
 
 version: 1
 
@@ -50,12 +48,7 @@ AppDir:
   files:
     include:
       - usr/share/ionobrowser/ionobrowser.py
-
-  pip:
-    requirements:
-      - PyQt6
-      - websockets
-      - requests
+      - usr/lib/python3/dist-packages
 
   runtime:
     env:
