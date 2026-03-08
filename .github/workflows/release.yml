@@ -102,18 +102,11 @@ jobs:
           APP_VERSION: ${{ github.ref_name }}
         run: appimage-builder --recipe AppImageBuilder.yml --skip-tests
 
-      - name: Find and rename AppImage
-        working-directory: appimage
-        run: |
-          # appimage-builder names the file from app_info: IonoBrowser-<version>-x86_64.AppImage
-          # Rename to include the git tag for clarity on the release page
-          find . -name "IonoBrowser-*.AppImage" | head -1 | xargs -I{} mv {} IonoBrowser-${{ github.ref_name }}-x86_64.AppImage
-
       - name: Upload AppImage artifact
         uses: actions/upload-artifact@v4
         with:
           name: IonoBrowser-linux
-          path: appimage/IonoBrowser-${{ github.ref_name }}-x86_64.AppImage
+          path: appimage/IonoBrowser-*.AppImage
 
   # ── Create GitHub Release ──────────────────────────────────────────────────
   release:
