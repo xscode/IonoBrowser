@@ -79,12 +79,18 @@ jobs:
 
       - name: Copy app and install Python deps into AppDir
         run: |
+          # App script
           mkdir -p appimage/AppDir/usr/share/ionobrowser
           cp ionobrowser.py appimage/AppDir/usr/share/ionobrowser/
 
-          # Copy Python interpreter into AppDir
+          # Icon — required by appimage-builder
+          mkdir -p appimage/AppDir/usr/share/icons/hicolor/256x256/apps
+          cp appimage/ionobrowser.svg appimage/AppDir/usr/share/icons/hicolor/256x256/apps/ionobrowser.svg
+
+          # Python interpreter + python symlink (needed by bundled scripts)
           mkdir -p appimage/AppDir/usr/bin
           cp $(which python3) appimage/AppDir/usr/bin/python3
+          ln -sf python3 appimage/AppDir/usr/bin/python
 
           # Install all Python dependencies into the AppDir
           mkdir -p appimage/AppDir/usr/lib/python3/dist-packages
