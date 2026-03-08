@@ -13,7 +13,7 @@ AppDir:
   app_info:
     id: com.github.xscode.ionobrowser
     name: IonoBrowser
-    icon: ionobrowser
+    icon: ionobrowser.svg
     version: !ENV ${APP_VERSION}
     exec: usr/bin/python3
     exec_args: "$APPDIR/usr/share/ionobrowser/ionobrowser.py $@"
