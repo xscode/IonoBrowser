@@ -43,7 +43,9 @@ jobs:
           pip install pyinstaller
 
       - name: Build EXE
-        run: pyinstaller --distpath dist --workpath build --specpath . IonoBrowser.spec
+        # --specpath is only valid when generating a new spec; omit it when
+        # running an existing .spec file.
+        run: pyinstaller --distpath dist --workpath build IonoBrowser.spec
         working-directory: ${{ github.workspace }}
 
       - name: Upload EXE artifact
@@ -81,6 +83,7 @@ jobs:
         run: |
           mkdir -p appimage/AppDir/usr/share/ionobrowser
           cp ionobrowser.py appimage/AppDir/usr/share/ionobrowser/
+          cp -r ionobrowser appimage/AppDir/usr/share/ionobrowser/
 
       - name: Build AppImage
         working-directory: appimage
@@ -91,7 +94,7 @@ jobs:
       - name: Find and rename AppImage
         working-directory: appimage
         run: |
-          # appimage-builder names the file from the recipe; normalise it
+          # appimage-builder names the file from app_info; normalise it
           mv IonoBrowser-*.AppImage IonoBrowser-${{ github.ref_name }}-x86_64.AppImage
 
       - name: Upload AppImage artifact
