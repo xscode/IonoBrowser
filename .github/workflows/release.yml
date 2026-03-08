@@ -43,7 +43,7 @@ jobs:
           pip install pyinstaller
 
       - name: Build EXE
-        run: pyinstaller --distpath dist --workpath build --specpath . IonoBrowser.spec
+        run: pyinstaller --distpath dist --workpath build IonoBrowser.spec
         working-directory: ${{ github.workspace }}
 
       - name: Upload EXE artifact
@@ -81,8 +81,12 @@ jobs:
         run: |
           mkdir -p appimage/AppDir/usr/share/ionobrowser
           cp ionobrowser.py appimage/AppDir/usr/share/ionobrowser/
-          # Install Python dependencies directly into the AppDir so they
-          # are bundled in the AppImage without needing the pip recipe key
+
+          # Copy Python interpreter into AppDir
+          mkdir -p appimage/AppDir/usr/bin
+          cp $(which python3) appimage/AppDir/usr/bin/python3
+
+          # Install all Python dependencies into the AppDir
           mkdir -p appimage/AppDir/usr/lib/python3/dist-packages
           pip install             --target=appimage/AppDir/usr/lib/python3/dist-packages             PyQt6 websockets requests pyserial
 
