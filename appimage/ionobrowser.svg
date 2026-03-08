@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <rect width="256" height="256" rx="32" fill="#1e1e2e"/>
+  <!-- Radio wave arcs -->
+  <path d="M 60 180 Q 128 80 196 180" stroke="#89b4fa" stroke-width="10" fill="none" stroke-linecap="round"/>
+  <path d="M 80 190 Q 128 110 176 190" stroke="#89dceb" stroke-width="10" fill="none" stroke-linecap="round"/>
+  <path d="M 100 200 Q 128 140 156 200" stroke="#a6e3a1" stroke-width="10" fill="none" stroke-linecap="round"/>
+  <!-- Antenna -->
+  <line x1="128" y1="80" x2="128" y2="40" stroke="#cdd6f4" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="128" cy="36" r="6" fill="#f38ba8"/>
+</svg>
