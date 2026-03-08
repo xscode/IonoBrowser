@@ -56,5 +56,3 @@ AppDir:
 
 AppImage:
   arch: x86_64
-  name: IonoBrowser-!ENV ${APP_VERSION}-x86_64
-  update-information: gh-releases-zsync|xscode|IonoBrowser|latest|IonoBrowser-*x86_64.AppImage.zsync
