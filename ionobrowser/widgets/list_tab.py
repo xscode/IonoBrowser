@@ -15,8 +15,10 @@ from PyQt6.QtCore import Qt, QTimer, QSortFilterProxyModel, pyqtSignal
 from PyQt6.QtWidgets import QApplication
 
 from ..models import FrequencyTableModel
-from ..helpers import parse_latlon, google_maps_url
+from ..helpers import parse_latlon, google_maps_url, parse_os_grid_ref, haversine_km
 from ..constants import FREQ_MATCH_TOLERANCE_HZ
+
+DIST_COL = "Distance"   # virtual column name
 
 
 class ListTab(QWidget):
@@ -32,6 +34,11 @@ class ListTab(QWidget):
         self._current_sdr_hz = 0
         self._match_freq     = False
         self._sdr_connected  = False
+        # Distance column
+        self._dist_enabled   = False
+        self._user_lat       = 0.0
+        self._user_lon       = 0.0
+        self._dist_unit      = "km"   # "km" or "miles"
 
         # Debounce timer — fires _refresh_table 150 ms after last keystroke
         self._search_timer = QTimer(self)
@@ -139,9 +146,25 @@ class ListTab(QWidget):
                     continue
                 try:
                     v = float(raw)
-                    if v <= 0:       return None
-                    elif v < 30_000: return int(v * 1000)
-                    else:            return int(v)
+                    if v <= 0:
+                        return None
+                    # Determine unit from column name first, then fall back to
+                    # magnitude heuristic:
+                    #   < 200       → MHz  (FM/HF in MHz, e.g. 88.1 – 107.9)
+                    #   200–30 000  → kHz  (HF/MW in kHz, e.g. 198, 9410)
+                    #   ≥ 30 000    → Hz   (already in Hz)
+                    if "mhz" in kl:
+                        return int(v * 1_000_000)
+                    elif "khz" in kl or kl == "freq_khz":
+                        return int(v * 1_000)
+                    elif "hz" in kl and "khz" not in kl and "mhz" not in kl:
+                        return int(v)
+                    elif v < 200:
+                        return int(v * 1_000_000)   # MHz
+                    elif v < 30_000:
+                        return int(v * 1_000)        # kHz
+                    else:
+                        return int(v)                # Hz
                 except ValueError:
                     continue
         return None
@@ -151,6 +174,71 @@ class ListTab(QWidget):
             return False
         hz = self._row_freq_hz(row)
         return hz is not None and abs(hz - self._current_sdr_hz) <= FREQ_MATCH_TOLERANCE_HZ
+
+    # ── Table render ──────────────────────────────────────────────────────────
+
+    # ── Distance helpers ──────────────────────────────────────────────────────
+
+    def set_location_settings(self, enabled: bool, lat: float, lon: float, unit: str):
+        """Called by MainWindow after settings are saved."""
+        self._dist_enabled = enabled
+        self._user_lat     = lat
+        self._user_lon     = lon
+        self._dist_unit    = unit   # "km" or "miles"
+        self._refresh_table()
+
+    def _row_latlon(self, row: dict) -> tuple[float, float] | None:
+        """Extract transmitter lat/lon from a row, trying Grid_Ref first,
+        then separate Lat/Lon columns, then any combined latlon column."""
+        # 1. OS/Irish grid reference column
+        for key, val in row.items():
+            kl = key.lower().strip()
+            if "grid" in kl or kl in ("grid_ref", "gridref", "os_grid", "ngr"):
+                ll = parse_os_grid_ref(str(val))
+                if ll:
+                    return ll
+
+        # 2. Separate decimal lat + lon columns
+        lat_val = lon_val = None
+        for key, val in row.items():
+            kl = key.lower().strip()
+            if kl in ("lat", "latitude"):
+                try: lat_val = float(val)
+                except (ValueError, TypeError): pass
+            elif kl in ("lon", "lng", "longitude"):
+                try: lon_val = float(val)
+                except (ValueError, TypeError): pass
+        if lat_val is not None and lon_val is not None:
+            if lat_val != 0.0 or lon_val != 0.0:
+                return (lat_val, lon_val)
+
+        # 3. Combined lat/lon string column (AOKI-style)
+        for key, val in row.items():
+            kl = key.lower().strip()
+            if kl in ("latlon", "lat_lon", "coords", "location"):
+                ll = parse_latlon(str(val))
+                if ll:
+                    return ll
+
+        return None
+
+    def _compute_distance(self, row: dict) -> float | None:
+        """Return distance from user location to transmitter, in selected unit."""
+        if not self._dist_enabled:
+            return None
+        if self._user_lat == 0.0 and self._user_lon == 0.0:
+            return None
+        ll = self._row_latlon(row)
+        if ll is None:
+            return None
+        km = haversine_km(self._user_lat, self._user_lon, ll[0], ll[1])
+        return km if self._dist_unit == "km" else km * 0.621371
+
+    def _dist_str(self, row: dict) -> str:
+        d = self._compute_distance(row)
+        if d is None:
+            return ""
+        return f"{d:.1f} {self._dist_unit}"
 
     # ── Table render ──────────────────────────────────────────────────────────
 
@@ -172,8 +260,22 @@ class ListTab(QWidget):
 
         visible = [r for r in self._data if ok(r)]
 
+        # Distance column is only shown when freq-matching is active and the
+        # feature is enabled in Settings (user has entered their coordinates).
+        show_dist = match_freq and getattr(self, "_dist_enabled", False)
+        if show_dist:
+            display_cols = self._columns + ([DIST_COL] if DIST_COL not in self._columns else [])
+            display_rows = []
+            for row in visible:
+                r = dict(row)
+                r[DIST_COL] = self._dist_str(row)
+                display_rows.append(r)
+        else:
+            display_cols = [c for c in self._columns if c != DIST_COL]
+            display_rows = visible
+
         first_load = self._model.columnCount() == 0
-        self._model.load(visible, self._columns)
+        self._model.load(display_rows, display_cols)
 
         # Reconnect selection model — beginResetModel can invalidate it
         try:
@@ -190,7 +292,8 @@ class ListTab(QWidget):
         notes = []
         if ft:
             notes.append(f'"{ft}"' + (f" in {col_filter}" if col_filter != "All Columns" else ""))
-        if match_freq: notes.append(f"~{self._current_sdr_hz/1e6:.3f} MHz")
+        if match_freq:
+            notes.append(f"~{self._current_sdr_hz/1e6:.3f} MHz")
         note = "  |  " + ", ".join(notes) if notes else ""
         self.count_lbl.setText(f"{len(visible)} / {len(self._data)}{note}")
 

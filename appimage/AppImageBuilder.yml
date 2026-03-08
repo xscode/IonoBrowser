@@ -47,12 +47,26 @@ AppDir:
 
   files:
     include:
+      # Entry point
       - usr/share/ionobrowser/ionobrowser.py
+      # The ionobrowser package — all submodules including widgets/
+      - usr/share/ionobrowser/ionobrowser/__init__.py
+      - usr/share/ionobrowser/ionobrowser/constants.py
+      - usr/share/ionobrowser/ionobrowser/helpers.py
+      - usr/share/ionobrowser/ionobrowser/models.py
+      - usr/share/ionobrowser/ionobrowser/parsers.py
+      - usr/share/ionobrowser/ionobrowser/workers.py
+      - usr/share/ionobrowser/ionobrowser/mainwindow.py
+      - usr/share/ionobrowser/ionobrowser/widgets/__init__.py
+      - usr/share/ionobrowser/ionobrowser/widgets/list_tab.py
+      - usr/share/ionobrowser/ionobrowser/widgets/sdr_panel.py
+      - usr/share/ionobrowser/ionobrowser/widgets/settings_dialog.py
+      # Python packages installed by pip
       - usr/lib/python3/dist-packages
 
   runtime:
     env:
-      PYTHONPATH: "$APPDIR/usr/lib/python3/dist-packages"
+      PYTHONPATH: "$APPDIR/usr/lib/python3/dist-packages:$APPDIR/usr/share/ionobrowser"
 
 AppImage:
   arch: x86_64

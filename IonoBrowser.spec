@@ -2,7 +2,7 @@
 # PyInstaller build spec for IonoBrowser
 # Run with: pyinstaller IonoBrowser.spec
 
-from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
+from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, collect_submodules
 
 block_cipher = None
 
@@ -10,7 +10,12 @@ a = Analysis(
     ['ionobrowser.py'],
     pathex=[],
     binaries=collect_dynamic_libs('PyQt6'),
-    datas=collect_data_files('PyQt6'),
+    datas=[
+        # PyQt6 resources (translations, plugins, etc.)
+        *collect_data_files('PyQt6'),
+        # Include the entire ionobrowser package
+        ('ionobrowser', 'ionobrowser'),
+    ],
     hiddenimports=[
         'PyQt6.QtCore',
         'PyQt6.QtGui',
@@ -20,6 +25,8 @@ a = Analysis(
         'websockets.legacy',
         'websockets.legacy.client',
         'pkg_resources.extern',
+        # ionobrowser submodules — explicit so PyInstaller doesn't miss any
+        *collect_submodules('ionobrowser'),
     ],
     hookspath=[],
     hooksconfig={},

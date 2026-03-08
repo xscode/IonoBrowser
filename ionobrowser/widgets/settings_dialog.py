@@ -5,7 +5,7 @@ IonoBrowser — Settings dialog.
 from PyQt6.QtWidgets import (
     QDialog, QWidget, QHBoxLayout, QVBoxLayout, QFormLayout,
     QListWidget, QStackedWidget, QDialogButtonBox,
-    QComboBox, QLineEdit, QSpinBox, QCheckBox, QPushButton
+    QComboBox, QLineEdit, QSpinBox, QCheckBox, QPushButton, QDoubleSpinBox, QLabel
 )
 from PyQt6.QtCore import QSettings
 
@@ -62,6 +62,7 @@ class SettingsDialog(QDialog):
 
     def _build_panels(self):
         self._add_panel("SDR Software", self._build_sdr_panel())
+        self._add_panel("Location",     self._build_location_panel())
 
     def _add_panel(self, label: str, widget: QWidget):
         self._cat_list.addItem(label)
@@ -150,6 +151,41 @@ class SettingsDialog(QDialog):
             self._sdr_serial.setEditText(current)
         self._sdr_serial.blockSignals(False)
 
+    def _build_location_panel(self) -> QWidget:
+        w    = QWidget()
+        form = QFormLayout(w)
+        form.setSpacing(10)
+
+        self._dist_enabled = QCheckBox("Show distance column in frequency tables")
+        form.addRow(self._dist_enabled)
+
+        self._user_lat = QDoubleSpinBox()
+        self._user_lat.setRange(-90.0, 90.0)
+        self._user_lat.setDecimals(6)
+        self._user_lat.setSuffix("°")
+        self._user_lat.setSpecialValueText("")
+        form.addRow("Latitude:", self._user_lat)
+
+        self._user_lon = QDoubleSpinBox()
+        self._user_lon.setRange(-180.0, 180.0)
+        self._user_lon.setDecimals(6)
+        self._user_lon.setSuffix("°")
+        form.addRow("Longitude:", self._user_lon)
+
+        self._dist_unit = QComboBox()
+        self._dist_unit.addItems(["km", "miles"])
+        form.addRow("Distance unit:", self._dist_unit)
+
+        note = QLabel(
+            "Enter your location in decimal degrees (e.g. 51.5074, -0.1278 for London).\n"
+            "Distances are calculated from transmitter grid references where available."
+        )
+        note.setWordWrap(True)
+        note.setStyleSheet("color: palette(mid);")
+        form.addRow(note)
+
+        return w
+
     def _serial_port_value(self) -> str:
         idx  = self._sdr_serial.currentIndex()
         data = self._sdr_serial.itemData(idx)
@@ -191,6 +227,18 @@ class SettingsDialog(QDialog):
         self._sdr_autoconnect.setChecked(
             self._settings.value("sdr_autoconnect", False, type=bool)
         )
+        # Location
+        self._dist_enabled.setChecked(
+            self._settings.value("dist_enabled", False, type=bool)
+        )
+        self._user_lat.setValue(
+            float(self._settings.value("user_lat", 0.0))
+        )
+        self._user_lon.setValue(
+            float(self._settings.value("user_lon", 0.0))
+        )
+        unit = self._settings.value("dist_unit", "km")
+        self._dist_unit.setCurrentIndex(0 if unit == "km" else 1)
 
     def _save(self):
         self._settings.setValue("sdr_software",   self._sdr_software.currentText())
@@ -201,6 +249,11 @@ class SettingsDialog(QDialog):
         self._settings.setValue("sdr_serial",      self._serial_port_value())
         self._settings.setValue("sdr_baud",        self._sdr_baud.currentText())
         self._settings.setValue("sdr_autoconnect", self._sdr_autoconnect.isChecked())
+        # Location
+        self._settings.setValue("dist_enabled", self._dist_enabled.isChecked())
+        self._settings.setValue("user_lat",     self._user_lat.value())
+        self._settings.setValue("user_lon",     self._user_lon.value())
+        self._settings.setValue("dist_unit",    self._dist_unit.currentText())
         self.accept()
 
     def sdr_host(self) -> str:

@@ -127,6 +127,18 @@ class MainWindow(QMainWindow):
             port = int(self._settings.value("sdr_port", 8073))
             self.sdr_panel.set_connection_params(host, port)
             self.status_bar.showMessage(f"Settings saved — SDR: {host}:{port}")
+            self._apply_location_settings()
+
+    def _apply_location_settings(self):
+        """Push current location settings to every open tab."""
+        enabled = self._settings.value("dist_enabled", False, type=bool)
+        lat     = float(self._settings.value("user_lat", 0.0))
+        lon     = float(self._settings.value("user_lon", 0.0))
+        unit    = self._settings.value("dist_unit", "km")
+        for i in range(self.tabs.count()):
+            tab = self.tabs.widget(i)
+            if isinstance(tab, ListTab):
+                tab.set_location_settings(enabled, lat, lon, unit)
 
     def _apply_theme(self, name: str):
         from PyQt6.QtWidgets import QApplication
@@ -178,6 +190,7 @@ class MainWindow(QMainWindow):
     def _add_tab(self, tab: ListTab, label: str):
         idx = self.tabs.addTab(tab, label)
         self.tabs.setCurrentIndex(idx)
+        self._apply_location_settings()
         tab.row_selected.connect(self._on_row_selected)
         tab.tune_requested.connect(self._on_tune_from_tab)
         tab.set_sdr_frequency(self.sdr_panel.current_freq_hz())
@@ -463,8 +476,26 @@ class MainWindow(QMainWindow):
                 if freq_raw:
                     break
         try:
-            v  = float(freq_raw)
-            hz = int(v * 1000) if v < 30_000 else int(v)
+            v = float(freq_raw)
+            # Detect unit from column name, then fall back to magnitude heuristic
+            kl_match = ""
+            for key in entry:
+                kl = key.lower().strip()
+                if "freq" in kl or kl in ("khz", "mhz", "hz", "frequency", "freq_khz"):
+                    kl_match = kl
+                    break
+            if "mhz" in kl_match:
+                hz = int(v * 1_000_000)
+            elif "khz" in kl_match or kl_match == "freq_khz":
+                hz = int(v * 1_000)
+            elif "hz" in kl_match and "khz" not in kl_match and "mhz" not in kl_match:
+                hz = int(v)
+            elif v < 200:
+                hz = int(v * 1_000_000)   # MHz
+            elif v < 30_000:
+                hz = int(v * 1_000)        # kHz
+            else:
+                hz = int(v)                # Hz
         except (ValueError, TypeError):
             return
         mode = ""
