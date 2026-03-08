@@ -2,7 +2,24 @@
 IonoBrowser — Qt table model.
 """
 
+import re
+
 from PyQt6.QtCore import Qt, QAbstractTableModel, QModelIndex
+
+# Columns whose values should sort numerically rather than lexicographically.
+# Matches: Distance (km), Distance (miles), Frequency_MHz, Power_kW, etc.
+_NUMERIC_RE = re.compile(
+    r'^(distance\b|frequency|freq\b|power\b|kw\b)',
+    re.IGNORECASE,
+)
+
+SORT_ROLE = Qt.ItemDataRole.UserRole + 1
+
+
+def _numeric_key(value: str) -> float:
+    """Pull the leading float out of a string, or inf so blanks sort last."""
+    m = re.match(r'^\s*([0-9]+(?:\.[0-9]*)?)', value)
+    return float(m.group(1)) if m else float('inf')
 
 
 class FrequencyTableModel(QAbstractTableModel):
@@ -40,6 +57,9 @@ class FrequencyTableModel(QAbstractTableModel):
             return str(row.get(col, ""))
         if role == Qt.ItemDataRole.UserRole:
             return row      # full dict, used by selection handler
+        if role == SORT_ROLE:
+            if _NUMERIC_RE.match(col):
+                return _numeric_key(str(row.get(col, "")))
         return None
 
     def headerData(self, section: int, orientation, role=Qt.ItemDataRole.DisplayRole):

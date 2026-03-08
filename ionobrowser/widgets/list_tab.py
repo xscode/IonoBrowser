@@ -14,11 +14,11 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QTimer, QSortFilterProxyModel, pyqtSignal
 from PyQt6.QtWidgets import QApplication
 
-from ..models import FrequencyTableModel
+from ..models import FrequencyTableModel, SORT_ROLE
 from ..helpers import parse_latlon, google_maps_url, parse_os_grid_ref, haversine_km
 from ..constants import FREQ_MATCH_TOLERANCE_HZ
 
-DIST_COL = "Distance"   # virtual column name
+_DIST_COL_PREFIX = "Distance"   # column name prefix — unit appended dynamically
 
 
 class ListTab(QWidget):
@@ -88,6 +88,7 @@ class ListTab(QWidget):
         self._model = FrequencyTableModel(self)
         self._proxy = QSortFilterProxyModel(self)
         self._proxy.setSourceModel(self._model)
+        self._proxy.setSortRole(SORT_ROLE)
 
         # View
         self.table = QTableView()
@@ -124,7 +125,7 @@ class ListTab(QWidget):
                 time_val = str(val).strip().strip('"')
                 break
         if not time_val or "-" not in time_val:
-            return False
+            return True   # no schedule data — don't hide the row
         try:
             s, e  = time_val.split("-", 1)
             s, e  = s.strip().zfill(4), e.strip().zfill(4)
@@ -178,6 +179,11 @@ class ListTab(QWidget):
     # ── Table render ──────────────────────────────────────────────────────────
 
     # ── Distance helpers ──────────────────────────────────────────────────────
+
+    @property
+    def _dist_col(self) -> str:
+        """Column header including current unit, e.g. 'Distance (km)'."""
+        return f"Distance ({self._dist_unit})"
 
     def set_location_settings(self, enabled: bool, lat: float, lon: float, unit: str):
         """Called by MainWindow after settings are saved."""
@@ -238,7 +244,7 @@ class ListTab(QWidget):
         d = self._compute_distance(row)
         if d is None:
             return ""
-        return f"{d:.1f} {self._dist_unit}"
+        return f"{d:.1f}"
 
     # ── Table render ──────────────────────────────────────────────────────────
 
@@ -264,14 +270,19 @@ class ListTab(QWidget):
         # feature is enabled in Settings (user has entered their coordinates).
         show_dist = match_freq and getattr(self, "_dist_enabled", False)
         if show_dist:
-            display_cols = self._columns + ([DIST_COL] if DIST_COL not in self._columns else [])
+            dist_col = self._dist_col
+            # Drop any stale distance column with a different unit name
+            base_cols = [c for c in self._columns
+                         if not c.startswith(_DIST_COL_PREFIX)]
+            display_cols = base_cols + [dist_col]
             display_rows = []
             for row in visible:
                 r = dict(row)
-                r[DIST_COL] = self._dist_str(row)
+                r[dist_col] = self._dist_str(row)
                 display_rows.append(r)
         else:
-            display_cols = [c for c in self._columns if c != DIST_COL]
+            display_cols = [c for c in self._columns
+                            if not c.startswith(_DIST_COL_PREFIX)]
             display_rows = visible
 
         first_load = self._model.columnCount() == 0
@@ -358,6 +369,14 @@ class ListTab(QWidget):
                     return (lat, lon)
             except (ValueError, TypeError):
                 pass
+
+        # 3. OS / Irish Grid reference column (FM CSV, Ofcom data, etc.)
+        for key, val in entry.items():
+            kl = key.lower().strip().strip('"')
+            if "grid" in kl or kl in ("grid_ref", "gridref", "os_grid", "ngr"):
+                result = parse_os_grid_ref(str(val))
+                if result is not None:
+                    return result
 
         return None
 

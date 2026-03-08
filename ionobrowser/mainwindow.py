@@ -162,6 +162,7 @@ class MainWindow(QMainWindow):
         for p in paths:
             if p and Path(p).exists():
                 self._open_any_file(p)
+        self._apply_location_settings()
 
     def closeEvent(self, event):
         self._settings.setValue("geometry", self.saveGeometry())
@@ -222,6 +223,56 @@ class MainWindow(QMainWindow):
         if path:
             self._open_any_file(path)
 
+    def _maybe_cache_file(self, path: str) -> None:
+        """After successfully opening a file, offer to cache it if it lives
+        outside app_data_dir — or offer to update the cache if a copy already
+        exists there with different content."""
+        src       = Path(path).resolve()
+        cache_dir = app_data_dir()
+
+        # Already inside the cache — nothing to do
+        try:
+            src.relative_to(cache_dir)
+            return
+        except ValueError:
+            pass
+
+        dest = cache_dir / src.name
+
+        if dest.exists():
+            # Same name already cached — compare content
+            src_bytes  = src.read_bytes()
+            dest_bytes = dest.read_bytes()
+            if src_bytes == dest_bytes:
+                return   # identical — silent
+            # Content differs — offer to update
+            reply = QMessageBox.question(
+                self,
+                "Update cached copy?",
+                f"<b>{src.name}</b> differs from the copy in your cache.<br><br>"
+                f"Would you like to update the cached copy so the new version "
+                f"reloads automatically on startup?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                import shutil
+                shutil.copy2(src, dest)
+                self.status_bar.showMessage(f"Cache updated — {src.name}")
+        else:
+            # Not cached at all — offer to cache
+            reply = QMessageBox.question(
+                self,
+                "Cache this file?",
+                f"<b>{src.name}</b> is not in your cache directory.<br><br>"
+                f"Would you like to save a copy so it reloads automatically "
+                f"on startup?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                import shutil
+                shutil.copy2(src, dest)
+                self.status_bar.showMessage(f"Cached — {src.name}")
+
     def _open_any_file(self, path: str, label: str = ""):
         label = label or Path(path).name
         norm  = str(Path(path).resolve())
@@ -242,6 +293,7 @@ class MainWindow(QMainWindow):
                     tab = ListTab(label, data, cols, path)
                     self._add_tab(tab, label)
                     self.status_bar.showMessage(f"Loaded {len(data)} entries - {label} [{fmt}]")
+                    self._maybe_cache_file(path)
                 except Exception as e:
                     QMessageBox.critical(self, "Error", f"Could not parse {label}:\n{e}")
             else:
@@ -279,6 +331,7 @@ class MainWindow(QMainWindow):
                 self.status_bar.showMessage(
                     f"Loaded {len(data)} entries - {tab_label}{enc_note}{delim_note}"
                 )
+                self._maybe_cache_file(path)
                 return True
             except UnicodeDecodeError as e:
                 last_err = e
