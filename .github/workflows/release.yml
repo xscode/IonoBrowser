@@ -77,10 +77,14 @@ jobs:
       - name: Install appimage-builder
         run: pip install appimage-builder
 
-      - name: Copy app into AppDir
+      - name: Copy app and install Python deps into AppDir
         run: |
           mkdir -p appimage/AppDir/usr/share/ionobrowser
           cp ionobrowser.py appimage/AppDir/usr/share/ionobrowser/
+          # Install Python dependencies directly into the AppDir so they
+          # are bundled in the AppImage without needing the pip recipe key
+          mkdir -p appimage/AppDir/usr/lib/python3/dist-packages
+          pip install             --target=appimage/AppDir/usr/lib/python3/dist-packages             PyQt6 websockets requests pyserial
 
       - name: Build AppImage
         working-directory: appimage
