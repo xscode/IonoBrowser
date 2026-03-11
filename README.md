@@ -3,7 +3,7 @@
 
 # IonoBrowser
 
-**IonoBrowser** is a desktop application for browsing HF shortwave frequency lists and controlling an [SDRplay SDRConnect](https://www.sdrplay.com/sdrconnect/) receiver via its WebSocket API.
+**IonoBrowser** is a desktop application for browsing frequency lists and controlling SDR controller software.
 
 Open multiple frequency databases in tabs, filter by text, time-of-broadcast, or current VFO frequency, and tune your SDR with a double-click.
 
@@ -26,9 +26,8 @@ Open multiple frequency databases in tabs, filter by text, time-of-broadcast, or
 - **On Air Now filter** — shows only stations currently broadcasting based on UTC schedule columns
 - **Match SDR Freq** — filters all tabs to entries within ±5 kHz of the current SDRConnect VFO
 - **SDRConnect control** — connect, tune, and change mode directly from the app via WebSocket
-- **Live readback** — VFO frequency, demodulator mode, and signal power updated in real time
+- **Live readback** — VFO frequency, demodulator mode, and signal power updated in real time (Where compatible protocols exist)
 - **Dark and Light themes** — switchable from the Help menu, preference saved across sessions
-- **Edit support** — add, edit, and delete entries in any list; save back to CSV
 - **Cross-platform** — designed for Linux, macOS, and Windows _(tested on Linux; Windows/macOS testing in progress)_
 
 ---
