@@ -440,7 +440,8 @@ class MainWindow(QMainWindow):
 
         if software in ("SDR++", "GQRX"):
             self._rig_worker = RigctldWorker(host, port,
-                                             strength_supported=(software == "GQRX"))
+                                             strength_supported=(software == "GQRX"),
+                                             mode_supported=(software == "GQRX"))
             w = self._rig_worker
         else:
             self._ws_worker = SDRWebSocketWorker(host, port)
@@ -488,6 +489,11 @@ class MainWindow(QMainWindow):
         self._rig_worker = None
 
     def _on_sdr_error(self, msg: str):
+        # Poll warnings (transient) just show in the status bar
+        if msg.startswith("Poll error"):
+            self.status_bar.showMessage(msg)
+            return
+        # Fatal errors — show dialog and mark as disconnected
         software = self._settings.value("sdr_software", "SDRConnect")
         QMessageBox.warning(self, f"{software} Error", msg)
         self.sdr_panel.set_connected(False)

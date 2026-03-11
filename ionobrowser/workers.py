@@ -185,8 +185,10 @@ class RigctldWorker(QThread):
     error           = pyqtSignal(str)
 
     POLL_INTERVAL_S = 1.0
+    SOCK_TIMEOUT_S  = 5.0   # per-recv timeout — must be > poll interval
+    MAX_ERRORS      = 3     # consecutive poll failures before disconnecting
 
-    def __init__(self, host="localhost", port=4532, strength_supported=False):
+    def __init__(self, host="localhost", port=4532, strength_supported=False, mode_supported=True):
         super().__init__()
         self.host                = host
         self.port                = port
@@ -194,6 +196,7 @@ class RigctldWorker(QThread):
         self._sock               = None
         self._pending: list[str] = []
         self._strength_supported = strength_supported
+        self._mode_supported     = mode_supported
 
     def set_frequency(self, freq_hz: int):
         self._send(f"F {freq_hz}\n")
@@ -238,7 +241,7 @@ class RigctldWorker(QThread):
         self._running = True
         try:
             self._sock = socket.create_connection((self.host, self.port), timeout=5)
-            self._sock.settimeout(2.0)
+            self._sock.settimeout(self.SOCK_TIMEOUT_S)
         except Exception as e:
             self.error.emit(f"Could not connect to {self.host}:{self.port}\n{e}")
             self._running = False
@@ -251,7 +254,8 @@ class RigctldWorker(QThread):
             except Exception: pass
         self._pending.clear()
 
-        last_poll = 0.0
+        last_poll    = 0.0
+        error_count  = 0
         while self._running:
             now = time.monotonic()
             if now - last_poll >= self.POLL_INTERVAL_S:
@@ -260,7 +264,7 @@ class RigctldWorker(QThread):
                     self._sock.sendall(b"f\n")
                     resp = self._recv_line()
                     if resp is None:
-                        break
+                        raise IOError("No response to 'f'")
                     if not resp.startswith("RPRT"):
                         try:
                             hz = int(float(resp))
@@ -269,20 +273,21 @@ class RigctldWorker(QThread):
                             pass
 
                     # ── Mode (two lines: mode name + passband Hz) ────────
-                    self._sock.sendall(b"m\n")
-                    line1 = self._recv_line()   # mode string e.g. "AM"
-                    line2 = self._recv_line()   # passband Hz e.g. "10000"
-                    if line1 is None or line2 is None:
-                        break
-                    if not line1.startswith("RPRT"):
-                        self.property_update.emit("demodulator", line1)
+                    if self._mode_supported:
+                        self._sock.sendall(b"m\n")
+                        line1 = self._recv_line()
+                        line2 = self._recv_line()
+                        if line1 is None or line2 is None:
+                            raise IOError("No response to 'm'")
+                        if not line1.startswith("RPRT"):
+                            self.property_update.emit("demodulator", line1)
 
                     # ── Signal strength (GQRX only) ──────────────────────
                     if self._strength_supported:
                         self._sock.sendall(b"l STRENGTH\n")
                         strength_resp = self._recv_line()
                         if strength_resp is None:
-                            break
+                            raise IOError("No response to 'l STRENGTH'")
                         if not strength_resp.startswith("RPRT"):
                             try:
                                 db = float(strength_resp)
@@ -290,8 +295,14 @@ class RigctldWorker(QThread):
                             except ValueError:
                                 pass
 
-                except Exception:
-                    break
+                    error_count = 0
+
+                except Exception as e:
+                    error_count += 1
+                    self.error.emit(f"Poll error ({error_count}/{self.MAX_ERRORS}): {type(e).__name__}: {e}")
+                    if error_count >= self.MAX_ERRORS:
+                        break
+
                 last_poll = now
             else:
                 time.sleep(0.05)
