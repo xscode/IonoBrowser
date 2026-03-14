@@ -85,15 +85,23 @@ class SDRControlPanel(QGroupBox):
         if prop == "device_vfo_frequency":
             try:
                 hz = int(value)
-                self.lbl_vfo.setText(f"VFO: {hz/1e6:.4f} MHz")
-                self._current_freq_hz = hz
+                if hz != getattr(self, "_current_freq_hz", None):
+                    self._current_freq_hz = hz
+                    self.lbl_vfo.setText(f"VFO: {hz/1e6:.4f} MHz")
             except ValueError:
                 pass
         elif prop == "demodulator":
-            self.lbl_mode.setText(f"Mode: {value}")
+            if value != getattr(self, "_current_mode", None):
+                self._current_mode = value
+                self.lbl_mode.setText(f"Mode: {value}")
         elif prop == "signal_power":
-            try:    self.lbl_power.setText(f"Power: {float(value):.1f} dB")
-            except ValueError: pass
+            try:
+                db = float(value)
+                if db != getattr(self, "_current_power", None):
+                    self._current_power = db
+                    self.lbl_power.setText(f"Power: {db:.1f} dB")
+            except ValueError:
+                pass
 
     def current_freq_hz(self) -> int:
         return getattr(self, "_current_freq_hz", 0)

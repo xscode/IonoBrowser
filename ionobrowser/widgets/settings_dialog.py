@@ -61,12 +61,25 @@ class SettingsDialog(QDialog):
         self._cat_list.setCurrentRow(0)
 
     def _build_panels(self):
+        self._add_panel("General",      self._build_general_panel())
         self._add_panel("SDR Software", self._build_sdr_panel())
         self._add_panel("Location",     self._build_location_panel())
 
     def _add_panel(self, label: str, widget: QWidget):
         self._cat_list.addItem(label)
         self._stack.addWidget(widget)
+
+    def _build_general_panel(self) -> QWidget:
+        w    = QWidget()
+        form = QFormLayout(w)
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapAllRows)
+        self._debug_enabled = QCheckBox("Show debug log panel")
+        self._debug_enabled.setToolTip(
+            "Opens the debug log dock at the bottom of the window.\n"
+            "Logs frequency changes and filter timing in milliseconds."
+        )
+        form.addRow(self._debug_enabled)
+        return w
 
     def _build_sdr_panel(self) -> QWidget:
         w    = QWidget()
@@ -231,6 +244,9 @@ class SettingsDialog(QDialog):
         self._dist_enabled.setChecked(
             self._settings.value("dist_enabled", False, type=bool)
         )
+        self._debug_enabled.setChecked(
+            self._settings.value("debug_enabled", False, type=bool)
+        )
         self._user_lat.setValue(
             float(self._settings.value("user_lat", 0.0))
         )
@@ -254,6 +270,8 @@ class SettingsDialog(QDialog):
         self._settings.setValue("user_lat",     self._user_lat.value())
         self._settings.setValue("user_lon",     self._user_lon.value())
         self._settings.setValue("dist_unit",    self._dist_unit.currentText())
+        # General
+        self._settings.setValue("debug_enabled", self._debug_enabled.isChecked())
         self.accept()
 
     def sdr_host(self) -> str:

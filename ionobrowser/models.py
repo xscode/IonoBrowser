@@ -35,10 +35,45 @@ class FrequencyTableModel(QAbstractTableModel):
         self._columns: list[str] = []
 
     def load(self, data: list[dict], columns: list[str]):
-        self.beginResetModel()
-        self._data    = data
-        self._columns = columns
-        self.endResetModel()
+        if columns != self._columns:
+            # Column structure changed — full reset required
+            self.beginResetModel()
+            self._data    = data
+            self._columns = columns
+            self.endResetModel()
+            return
+
+        old_len = len(self._data)
+        new_len = len(data)
+
+        if new_len == old_len:
+            # Same shape — just swap data and repaint visible cells
+            self._data = data
+            if new_len > 0:
+                self.dataChanged.emit(
+                    self.index(0, 0),
+                    self.index(new_len - 1, len(self._columns) - 1)
+                )
+        elif new_len < old_len:
+            # Fewer rows — update existing cells then remove the tail
+            self._data = data
+            if new_len > 0:
+                self.dataChanged.emit(
+                    self.index(0, 0),
+                    self.index(new_len - 1, len(self._columns) - 1)
+                )
+            self.beginRemoveRows(QModelIndex(), new_len, old_len - 1)
+            self.endRemoveRows()
+        else:
+            # More rows — update existing cells then append new ones
+            self._data = data
+            if old_len > 0:
+                self.dataChanged.emit(
+                    self.index(0, 0),
+                    self.index(old_len - 1, len(self._columns) - 1)
+                )
+            self.beginInsertRows(QModelIndex(), old_len, new_len - 1)
+            self.endInsertRows()
 
     # ── required overrides ────────────────────────────────────────────────────
 

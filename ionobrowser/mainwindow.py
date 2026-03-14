@@ -6,13 +6,15 @@ import csv
 import re
 import zipfile
 import io
+import time
 from pathlib import Path
 
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QStatusBar,
-    QFileDialog, QMessageBox, QDialog, QTabWidget, QMenu
+    QFileDialog, QMessageBox, QDialog, QTabWidget, QMenu,
+    QDockWidget, QTextEdit, QPushButton, QHBoxLayout
 )
-from PyQt6.QtCore import QSettings
+from PyQt6.QtCore import QSettings, Qt
 from PyQt6.QtGui import QAction
 
 from .constants import (
@@ -65,6 +67,28 @@ class MainWindow(QMainWindow):
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
         self.status_bar.showMessage("Ready — File > Open CSV   or   Lists > Download")
+
+        # Debug dock — hidden by default
+        self._debug_dock  = QDockWidget("Debug Log", self)
+        self._debug_dock.setAllowedAreas(Qt.DockWidgetArea.BottomDockWidgetArea |
+                                         Qt.DockWidgetArea.RightDockWidgetArea)
+        dbg_widget = QWidget()
+        dbg_layout = QVBoxLayout(dbg_widget)
+        dbg_layout.setContentsMargins(4, 4, 4, 4)
+        self._debug_log = QTextEdit()
+        self._debug_log.setReadOnly(True)
+        self._debug_log.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
+        self._debug_log.setFontFamily("monospace")
+        btn_row = QHBoxLayout()
+        clear_btn = QPushButton("Clear")
+        clear_btn.clicked.connect(self._debug_log.clear)
+        btn_row.addWidget(clear_btn)
+        btn_row.addStretch()
+        dbg_layout.addWidget(self._debug_log)
+        dbg_layout.addLayout(btn_row)
+        self._debug_dock.setWidget(dbg_widget)
+        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self._debug_dock)
+        self._debug_dock.hide()
 
     # ── Menu ──────────────────────────────────────────────────────────────────
 
@@ -128,6 +152,7 @@ class MainWindow(QMainWindow):
             self.sdr_panel.set_connection_params(host, port)
             self.status_bar.showMessage(f"Settings saved — SDR: {host}:{port}")
             self._apply_location_settings()
+            self._apply_debug_settings()
 
     def _apply_location_settings(self):
         """Push current location settings to every open tab."""
@@ -163,6 +188,7 @@ class MainWindow(QMainWindow):
             if p and Path(p).exists():
                 self._open_any_file(p)
         self._apply_location_settings()
+        self._apply_debug_settings()
 
     def closeEvent(self, event):
         self._settings.setValue("geometry", self.saveGeometry())
@@ -194,6 +220,7 @@ class MainWindow(QMainWindow):
         self._apply_location_settings()
         tab.row_selected.connect(self._on_row_selected)
         tab.tune_requested.connect(self._on_tune_from_tab)
+        tab.debug_event.connect(self.debug_log)
         tab.set_sdr_frequency(self.sdr_panel.current_freq_hz())
         connected = self._ws_worker is not None or self._rig_worker is not None
         tab.set_tune_enabled(connected)
@@ -502,13 +529,45 @@ class MainWindow(QMainWindow):
         self._ws_worker  = None
         self._rig_worker = None
 
+    # ── Debug ─────────────────────────────────────────────────────────────────
+
+    def debug_log(self, msg: str):
+        """Append a timestamped line to the debug log if it's visible."""
+        if not self._debug_dock.isVisible():
+            return
+        ts = time.strftime("%H:%M:%S", time.localtime())
+        ms = int((time.time() % 1) * 1000)
+        self._debug_log.append(f"[{ts}.{ms:03d}] {msg}")
+
+    def _apply_debug_settings(self):
+        enabled = self._settings.value("debug_enabled", False, type=bool)
+        self._debug_dock.setVisible(enabled)
+
+    def _toggle_debug(self, checked: bool):
+        self._debug_dock.setVisible(checked)
+
+    # ── SDR property updates ──────────────────────────────────────────────────
+
     def _on_property_update(self, prop: str, value: str):
         self.sdr_panel.update_property(prop, value)
         if prop == "device_vfo_frequency":
             try:
                 hz = int(value)
+                t0 = time.perf_counter()
+                changed = False
                 for i in range(self.tabs.count()):
-                    self.tabs.widget(i).set_sdr_frequency(hz)
+                    tab = self.tabs.widget(i)
+                    prev = getattr(tab, "_current_sdr_hz", None)
+                    tab.set_sdr_frequency(hz)
+                    if prev != hz:
+                        changed = True
+                if changed and self._debug_dock.isVisible():
+                    elapsed = (time.perf_counter() - t0) * 1000
+                    self.debug_log(
+                        f"Freq change → {hz/1e6:.4f} MHz  "
+                        f"tabs={self.tabs.count()}  "
+                        f"chain={elapsed:.1f} ms"
+                    )
             except ValueError:
                 pass
 

@@ -5,13 +5,15 @@ One tab per loaded frequency list. Self-contained search/filter state.
 """
 
 import webbrowser
+import time
+import bisect
 from datetime import datetime, timezone
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QLabel,
     QComboBox, QCheckBox, QTableView, QAbstractItemView, QHeaderView, QMenu
 )
-from PyQt6.QtCore import Qt, QTimer, QSortFilterProxyModel, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, QSortFilterProxyModel, pyqtSignal, QThread
 from PyQt6.QtWidgets import QApplication
 
 from ..models import FrequencyTableModel, SORT_ROLE
@@ -21,9 +23,29 @@ from ..constants import FREQ_MATCH_TOLERANCE_HZ
 _DIST_COL_PREFIX = "Distance"   # column name prefix — unit appended dynamically
 
 
+class _GeoWorker(QThread):
+    """Resolves grid refs / lat-lon columns to (_lat, _lon) in a background
+    thread so the UI isn't blocked on first load of large datasets."""
+    done = pyqtSignal()
+
+    def __init__(self, data: list, row_latlon_fn):
+        super().__init__()
+        self._data          = data
+        self._row_latlon_fn = row_latlon_fn
+
+    def run(self):
+        for row in self._data:
+            if "_lat" not in row:
+                ll = self._row_latlon_fn(row)
+                row["_lat"] = ll[0] if ll else None
+                row["_lon"] = ll[1] if ll else None
+        self.done.emit()
+
+
 class ListTab(QWidget):
     row_selected   = pyqtSignal(dict)
     tune_requested = pyqtSignal(dict)
+    debug_event    = pyqtSignal(str)   # debug messages → MainWindow
 
     def __init__(self, label: str, data: list, columns: list, path: str = "", parent=None):
         super().__init__(parent)
@@ -39,6 +61,28 @@ class ListTab(QWidget):
         self._user_lat       = 0.0
         self._user_lon       = 0.0
         self._dist_unit      = "km"   # "km" or "miles"
+
+        # Pre-compute frequency in Hz for every row once so _matches_sdr_freq
+        # never has to parse strings. Then build a sorted index for binary search.
+        for row in self._data:
+            row["_freq_hz"] = self._row_freq_hz(row)
+        self._build_freq_index()
+
+        # Check column names before spawning the geo worker — no point running
+        # Helmert transforms on a dataset that has no location data at all.
+        _loc_col_names = {"grid_ref", "gridref", "os_grid", "ngr", "lat", "lon",
+                          "latlon", "lat_lon", "coords", "location", "l/l"}
+        self._has_location_cols = any(
+            k.lower().strip().strip('"') in _loc_col_names or "grid" in k.lower()
+            for k in self._columns
+        )
+        self._dataset_has_location = False
+        if self._has_location_cols:
+            self._geo_worker = _GeoWorker(self._data, self._row_latlon)
+            self._geo_worker.done.connect(self._on_geo_done)
+            self._geo_worker.start()
+        else:
+            self._geo_worker = None
 
         # Debounce timer — fires _refresh_table 150 ms after last keystroke
         self._search_timer = QTimer(self)
@@ -170,10 +214,32 @@ class ListTab(QWidget):
                     continue
         return None
 
+    def _build_freq_index(self):
+        """Build a sorted list of (freq_hz, row) pairs for binary search.
+        Rows with no parseable frequency are excluded from the index but
+        still appear in the unfiltered view."""
+        self._freq_index = sorted(
+            ((row["_freq_hz"], row) for row in self._data if row["_freq_hz"] is not None),
+            key=lambda x: x[0]
+        )
+        self._freq_index_hz = [f for f, _ in self._freq_index]
+
+    def _freq_match_rows(self) -> list[dict]:
+        """Return rows within FREQ_MATCH_TOLERANCE_HZ of the current SDR freq
+        using binary search — O(log n) to find the window, O(k) to collect
+        matches where k is the number of matching rows."""
+        if not self._current_sdr_hz or not self._freq_index:
+            return []
+        tol  = FREQ_MATCH_TOLERANCE_HZ
+        lo   = bisect.bisect_left(self._freq_index_hz,  self._current_sdr_hz - tol)
+        hi   = bisect.bisect_right(self._freq_index_hz, self._current_sdr_hz + tol)
+        return [row for _, row in self._freq_index[lo:hi]]
+
     def _matches_sdr_freq(self, row: dict) -> bool:
+        """Fast check using pre-computed _freq_hz — no string parsing."""
         if not self._current_sdr_hz:
             return False
-        hz = self._row_freq_hz(row)
+        hz = row.get("_freq_hz")
         return hz is not None and abs(hz - self._current_sdr_hz) <= FREQ_MATCH_TOLERANCE_HZ
 
     # ── Table render ──────────────────────────────────────────────────────────
@@ -192,6 +258,14 @@ class ListTab(QWidget):
         self._user_lon     = lon
         self._dist_unit    = unit   # "km" or "miles"
         self._refresh_table()
+
+    def _on_geo_done(self):
+        """Called when the background geo worker finishes resolving lat/lon."""
+        self._dataset_has_location = any(
+            r.get("_lat") is not None for r in self._data
+        )
+        if self._dataset_has_location:
+            self._refresh_table()
 
     def _row_latlon(self, row: dict) -> tuple[float, float] | None:
         """Extract transmitter lat/lon from a row, trying Grid_Ref first,
@@ -228,31 +302,38 @@ class ListTab(QWidget):
 
         return None
 
-    def _compute_distance(self, row: dict) -> float | None:
-        """Return distance from user location to transmitter, in selected unit."""
-        if not self._dist_enabled:
-            return None
-        if self._user_lat == 0.0 and self._user_lon == 0.0:
-            return None
-        ll = self._row_latlon(row)
-        if ll is None:
-            return None
-        km = haversine_km(self._user_lat, self._user_lon, ll[0], ll[1])
-        return km if self._dist_unit == "km" else km * 0.621371
+    def _recompute_all_distances(self):
+        """Recompute _distance for every row in one pass. Called only when
+        location settings change — not on every filter refresh."""
+        if not self._dist_enabled or (self._user_lat == 0.0 and self._user_lon == 0.0):
+            for row in self._data:
+                row["_distance"] = None
+            return
+        factor = 1.0 if self._dist_unit == "km" else 0.621371
+        for row in self._data:
+            lat = row.get("_lat")
+            lon = row.get("_lon")
+            if lat is not None and lon is not None:
+                row["_distance"] = haversine_km(self._user_lat, self._user_lon, lat, lon) * factor
+            else:
+                row["_distance"] = None
 
     def _dist_str(self, row: dict) -> str:
-        d = self._compute_distance(row)
-        if d is None:
-            return ""
-        return f"{d:.1f}"
+        d = row.get("_distance")
+        return f"{d:.1f}" if d is not None else ""
 
     # ── Table render ──────────────────────────────────────────────────────────
 
     def _refresh_table(self):
+        t0         = time.perf_counter()
         ft         = self.search_edit.text().lower().strip()
         col_filter = self.col_combo.currentText()
         on_air     = self.on_air_chk.isChecked()
         match_freq = getattr(self, "_match_freq", False)
+
+        # When freq-matching, use binary search to get candidates (~handful of
+        # rows) rather than scanning the full dataset linearly.
+        pool = self._freq_match_rows() if match_freq else self._data
 
         def ok(row):
             if ft:
@@ -260,15 +341,18 @@ class ListTab(QWidget):
                        else " ".join(str(v) for v in row.values()))
                 if ft not in hay.lower():
                     return False
-            if on_air     and not self._is_on_air(row):        return False
-            if match_freq and not self._matches_sdr_freq(row): return False
+            if on_air and not self._is_on_air(row):
+                return False
             return True
 
-        visible = [r for r in self._data if ok(r)]
+        visible = [r for r in pool if ok(r)]
 
-        # Distance column is only shown when freq-matching is active and the
-        # feature is enabled in Settings (user has entered their coordinates).
-        show_dist = match_freq and getattr(self, "_dist_enabled", False)
+        # Distance column only shown when freq-matching is active, the feature
+        # is enabled in Settings, AND the dataset has at least one row with a
+        # parseable location (grid ref or lat/lon columns).
+        show_dist = (match_freq
+                     and getattr(self, "_dist_enabled", False)
+                     and self._dataset_has_location)
         if show_dist:
             dist_col = self._dist_col
             # Drop any stale distance column with a different unit name
@@ -308,9 +392,19 @@ class ListTab(QWidget):
         note = "  |  " + ", ".join(notes) if notes else ""
         self.count_lbl.setText(f"{len(visible)} / {len(self._data)}{note}")
 
+        elapsed = (time.perf_counter() - t0) * 1000
+        self.debug_event.emit(
+            f"refresh [{self.label}]  "
+            f"rows={len(visible)}/{len(self._data)}  "
+            f"freq={'yes' if match_freq else 'no'}  "
+            f"{elapsed:.1f} ms"
+        )
+
     # ── SDR state (called by MainWindow) ──────────────────────────────────────
 
     def set_sdr_frequency(self, hz: int):
+        if hz == getattr(self, "_current_sdr_hz", None):
+            return
         self._current_sdr_hz = hz
         if getattr(self, "_match_freq", False):
             self._refresh_table()
