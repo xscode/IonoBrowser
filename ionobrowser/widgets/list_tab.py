@@ -257,6 +257,7 @@ class ListTab(QWidget):
         self._user_lat     = lat
         self._user_lon     = lon
         self._dist_unit    = unit   # "km" or "miles"
+        self._recompute_all_distances()
         self._refresh_table()
 
     def _on_geo_done(self):
@@ -265,6 +266,7 @@ class ListTab(QWidget):
             r.get("_lat") is not None for r in self._data
         )
         if self._dataset_has_location:
+            self._recompute_all_distances()
             self._refresh_table()
 
     def _row_latlon(self, row: dict) -> tuple[float, float] | None:
