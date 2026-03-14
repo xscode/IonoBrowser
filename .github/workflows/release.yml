@@ -82,8 +82,13 @@ jobs:
       - name: Copy app into AppDir
         run: |
           mkdir -p appimage/AppDir/usr/share/ionobrowser
+          mkdir -p appimage/AppDir/usr/share/pixmaps
+          mkdir -p appimage/AppDir/usr/share/icons/hicolor/scalable/apps
           cp ionobrowser.py appimage/AppDir/usr/share/ionobrowser/
           cp -r ionobrowser appimage/AppDir/usr/share/ionobrowser/
+          # Icon — appimage-builder searches /pixmaps and hicolor icon theme
+          cp appdata/ionobrowser.svg appimage/AppDir/usr/share/pixmaps/ionobrowser.svg
+          cp appdata/ionobrowser.svg appimage/AppDir/usr/share/icons/hicolor/scalable/apps/ionobrowser.svg
 
       - name: Build AppImage
         working-directory: appimage
