@@ -13,7 +13,7 @@ AppDir:
   app_info:
     id: com.github.xscode.ionobrowser
     name: IonoBrowser
-    icon: ionobrowser.svg
+    icon: ionobrowser
     version: !ENV ${APP_VERSION}
     exec: usr/bin/python3
     exec_args: "$APPDIR/usr/share/ionobrowser/ionobrowser.py $@"
@@ -48,6 +48,9 @@ AppDir:
 
   files:
     include:
+      # Icons
+      - usr/share/pixmaps/ionobrowser.svg
+      - usr/share/icons/hicolor/scalable/apps/ionobrowser.svg
       # Entry point
       - usr/share/ionobrowser/ionobrowser.py
       # The ionobrowser package — all submodules including widgets/
